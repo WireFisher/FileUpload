@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include <stdlib.h>
 #include <openssl/md5.h>
@@ -11,20 +12,21 @@
 
 
 
-static inline void read_file_into_buf(const char *file, char *buf, long *filesize)
+static inline int read_file_into_buf(const char *file, char *buf, long *filesize)
 {
     FILE *fp;
 
     fp = fopen(file, "r");
     fseek(fp, 0, SEEK_END);
-    file_size = ftell(fp);
+    filesize = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    buf = malloc(file_size);
-    if(fread(buf, 1, file_size, fp) < file_size) {
+    buf = malloc(filesize);
+    if(fread(buf, 1, filesize, fp) < filesize) {
         perror("fread error.\n");
         return -1;
     }
     fclose(fp);
+    return 0;
 }
 
 
@@ -54,7 +56,7 @@ int send_file_info(int sock, unsigned int uid, char checksum[32], long filesize,
         return -1;
     if(sscanf(buf, RESUME_TEMPLATE_ACK, resume_id) != 1)
         return -1;
-    return 0
+    return 0;
 }
 
 
@@ -62,14 +64,14 @@ int send_chunk_head(int sock, unsigned int chunk_id)
 {
     char buf[LEN_CHUNK_HEAD_TEMPLATE+1] = "";
 
-    snprintf(buf, LEN_CHUNK_HEAD_TEMPLATE, CHUNK_HEAD_TEMPLATE, chunk_id)
+    snprintf(buf, LEN_CHUNK_HEAD_TEMPLATE, CHUNK_HEAD_TEMPLATE, chunk_id);
     if(write(sock, buf, LEN_CHUNK_HEAD_TEMPLATE) < 0)
         return -1;
     return 0;
 }
 
 
-int send_chunk_body(sock, file_buf, file_size, i)
+int send_chunk_body(int sock, char *file_buf, long file_size, unsigned i)
 {
     if(i == (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE - 1) {
         if(write(sock, file_buf + i * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE) != file_size % UPLOAD_CHUNK_SIZE)
