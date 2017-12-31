@@ -4,11 +4,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <openssl/md5.h>
+//#include <sys/types.h>
 #include <unistd.h>
 #include <assert.h>
 #include "protocol.h"
-
-
 
 
 
@@ -18,10 +17,10 @@ static inline int read_file_into_buf(const char *file, char *buf, long *filesize
 
     fp = fopen(file, "r");
     fseek(fp, 0, SEEK_END);
-    filesize = ftell(fp);
+    *filesize = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    buf = malloc(filesize);
-    if(fread(buf, 1, filesize, fp) < filesize) {
+    buf = malloc(*filesize);
+    if(fread(buf, 1, *filesize, fp) < *filesize) {
         perror("fread error.\n");
         return -1;
     }
@@ -33,12 +32,12 @@ static inline int read_file_into_buf(const char *file, char *buf, long *filesize
 static inline void md5checksum(const char *plain, long length, char checksum[33])
 {
     unsigned char digest[16];
-    struct MD5Context ctx;
+    MD5_CTX ctx;
     int i;
 
-    MD5Init(&ctx);
-    MD5Update(&ctx, plain, length);
-    MD5Final(digest, &ctx);
+    MD5_Init(&ctx);
+    MD5_Update(&ctx, plain, length);
+    MD5_Final(digest, &ctx);
 
     for(i = 0; i < 16; i++)
         sprintf(&checksum[i*2], "%02x", (unsigned int)digest[i]);
@@ -102,13 +101,13 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
 
     memset(&dest_addr, 0, sizeof(dest_addr));
     dest_addr.sin_family = AF_INET;
-    dest_addr.sin_addr.s_addr = inet_addr(dest_ipv);
+    dest_addr.sin_addr.s_addr = inet_addr(dest_ip);
     dest_addr.sin_port = htons(port);
 
     read_file_into_buf(file_name, file_buf, &file_size);
     md5checksum(file_buf, file_size, checksum);
 
-    unsigned int i, total_chunk_num, reconnect_count;
+    unsigned int i, total_chunk_num, reconnect_count, resume_id;
     i = reconnect_count = 0;
     total_chunk_num = (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE;
     while(i < total_chunk_num) {
@@ -144,4 +143,9 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
         return -1;
 
     return 0;
+}
+
+int main(int argc, char* argv[])
+{
+    upload(argv[1], "127.0.0.1", 4399, 1);
 }
