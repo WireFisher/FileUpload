@@ -3,7 +3,7 @@
 
 #define UPLOAD_CHUNK_SIZE       (1*1024*1024)
 
-#define RESUME_TEMPLATE         ("\x05UPL,UID:%10d,CHECKSUM:%32s,FILESIZE:%20ld")
+#define RESUME_TEMPLATE         ("\x05UPL,UID:%10u,CHECKSUM:%32s,FILESIZE:%20ld")
 #define LEN_RESUME_TEMPLATE     (29+10+32+20)
 
 #define RESUME_TEMPLATE_ACK     ("\x06UPL%8x")
