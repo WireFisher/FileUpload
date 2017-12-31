@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include "../client/protocol.h"
 
@@ -114,7 +116,7 @@ int recv_uploadings(int sock)
         return 0;
 }
 
-int run_server(const char *base_dir, const char *listening_ip, const char *port)
+int run_server(const char *base_dir, const char *listening_ip, int port)
 {
     int listen_sock;
     struct sockaddr_in server_addr;
@@ -127,7 +129,7 @@ int run_server(const char *base_dir, const char *listening_ip, const char *port)
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
     if(listening_ip)
-        server_addr.sin_addr.s_addr = htonl(listening_ip);
+        server_addr.sin_addr.s_addr = inet_addr(listening_ip);
     else
         server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
@@ -180,4 +182,9 @@ int run_server(const char *base_dir, const char *listening_ip, const char *port)
     }
 
     return 0;
+}
+
+int main()
+{
+    run_server("", "0.0.0.0", 4399);
 }
