@@ -93,8 +93,9 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
     long file_size;
     char *file_buf;
     char checksum[33];
-
-    if(sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP) < 0) {
+    
+    sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(sock < 0) {
         perror("socket error.\n");
         return -1;
     }
