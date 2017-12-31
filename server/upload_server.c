@@ -121,7 +121,8 @@ int run_server(const char *base_dir, const char *listening_ip, int port)
     int listen_sock;
     struct sockaddr_in server_addr;
 
-    if(listen_sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP) < 0) {
+    listen_sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(listen_sock < 0) {
         perror("socket error.\n");
         return -1;
     }
