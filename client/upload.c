@@ -7,11 +7,12 @@
 //#include <sys/types.h>
 #include <unistd.h>
 #include <assert.h>
+#include <signal.h>
 #include "protocol.h"
 
 
 
-static inline int read_file_into_buf(const char *file, char *buf, long *filesize)
+static inline int read_file_into_buf(const char *file, char **buf, long *filesize)
 {
     FILE *fp;
 
@@ -19,8 +20,8 @@ static inline int read_file_into_buf(const char *file, char *buf, long *filesize
     fseek(fp, 0, SEEK_END);
     *filesize = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    buf = malloc(*filesize);
-    if(fread(buf, 1, *filesize, fp) < *filesize) {
+    *buf = malloc(*filesize);
+    if(fread(*buf, 1, *filesize, fp) < *filesize) {
         perror("fread error.\n");
         return -1;
     }
@@ -41,6 +42,7 @@ static inline void md5checksum(const char *plain, long length, char checksum[33]
 
     for(i = 0; i < 16; i++)
         sprintf(&checksum[i*2], "%02x", (unsigned int)digest[i]);
+    checksum[32] = '\0';
 }
 
 
@@ -48,7 +50,10 @@ int send_file_info(int sock, unsigned int uid, char checksum[32], long filesize,
 {
     char buf[LEN_RESUME_TEMPLATE+1] = "";
 
-    snprintf(buf, LEN_RESUME_TEMPLATE, RESUME_TEMPLATE, uid, checksum, filesize);
+    snprintf(buf, LEN_RESUME_TEMPLATE+1, RESUME_TEMPLATE, uid, checksum, filesize);
+    printf("===================\n");
+    write(1, buf, LEN_RESUME_TEMPLATE);
+    printf("\n===================\n");
     if(write(sock, buf, LEN_RESUME_TEMPLATE) < 0)
         return -1;
     if(read(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
@@ -63,7 +68,7 @@ int send_chunk_head(int sock, unsigned int chunk_id)
 {
     char buf[LEN_CHUNK_HEAD_TEMPLATE+1] = "";
 
-    snprintf(buf, LEN_CHUNK_HEAD_TEMPLATE, CHUNK_HEAD_TEMPLATE, chunk_id);
+    snprintf(buf, LEN_CHUNK_HEAD_TEMPLATE+1, CHUNK_HEAD_TEMPLATE, chunk_id);
     if(write(sock, buf, LEN_CHUNK_HEAD_TEMPLATE) < 0)
         return -1;
     return 0;
@@ -73,7 +78,7 @@ int send_chunk_head(int sock, unsigned int chunk_id)
 int send_chunk_body(int sock, char *file_buf, long file_size, unsigned i)
 {
     if(i == (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE - 1) {
-        if(write(sock, file_buf + i * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE) != file_size % UPLOAD_CHUNK_SIZE)
+        if(write(sock, file_buf + i * UPLOAD_CHUNK_SIZE, file_size%UPLOAD_CHUNK_SIZE) != file_size % UPLOAD_CHUNK_SIZE)
             return -1;
         else
             return 0;
@@ -94,28 +99,35 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
     char *file_buf;
     char checksum[33];
     
-    sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if(sock < 0) {
-        perror("socket error.\n");
-        return -1;
-    }
+    signal(SIGPIPE, SIG_IGN);
 
-    memset(&dest_addr, 0, sizeof(dest_addr));
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_addr.s_addr = inet_addr(dest_ip);
-    dest_addr.sin_port = htons(port);
-
-    read_file_into_buf(file_name, file_buf, &file_size);
+    read_file_into_buf(file_name, &file_buf, &file_size);
     md5checksum(file_buf, file_size, checksum);
+    printf("File MD5: %s\n", checksum);
+    printf("File Size: %ld\n", file_size);
 
     unsigned int i, total_chunk_num, reconnect_count, resume_id;
-    i = reconnect_count = 0;
     total_chunk_num = (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE;
-    while(i < total_chunk_num) {
+    printf("Total_chunk_num: %u\n", total_chunk_num);
+
+
+    i = reconnect_count = 0;
+    while(i < total_chunk_num && reconnect_count < 20) {
+        sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if(sock < 0) {
+            perror("socket error.\n");
+            return -1;
+        }
+
+        memset(&dest_addr, 0, sizeof(dest_addr));
+        dest_addr.sin_family = AF_INET;
+        dest_addr.sin_addr.s_addr = inet_addr(dest_ip);
+        dest_addr.sin_port = htons(port);
         /* connect */
+        reconnect_count ++;
+        //gets(checksum);
         if(connect(sock, (struct sockaddr*)&dest_addr, sizeof(dest_addr)) < 0) {
             perror("Connecting to remote server failed, waiting for reconnecting.\n");
-            reconnect_count ++;
             if(reconnect_count > 10) {
                 perror("Failed to connect to remote server. Please check the network.\n");
                 break;
@@ -125,24 +137,33 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
         }
 
         /* ask where to start */
-        if(send_file_info(sock, uid, checksum, file_size, &resume_id) < 0)
+        if(send_file_info(sock, uid, checksum, file_size, &resume_id) < 0) {
+            close(sock);
             continue;
+        }
+
+        printf("starting from %uth chunk\n", resume_id);
 
         /* upload */
         for(i = resume_id; i < total_chunk_num; i++) {
+            printf("sending %uth chunk head\n", i);
             if(send_chunk_head(sock, i) < 0)
                 break;
+            printf("sending %uth chunk body\n", i);
             if(send_chunk_body(sock, file_buf, file_size, i) < 0)
                 break;
         }
+        close(sock);
     }
 
     free(file_buf);
-    close(sock);
 
-    if(i < total_chunk_num)
+    if(i < total_chunk_num) {
+        printf("Upload failed, %u/%u\n", i, total_chunk_num);
         return -1;
+    }
 
+    printf("Upload done, %u/%u\n", i, total_chunk_num);
     return 0;
 }
 

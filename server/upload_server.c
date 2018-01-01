@@ -7,7 +7,7 @@
 #include "../client/protocol.h"
 
 
-#define FILETAIL_TEMPLATE       ("UID:%10d,CHUNKID:%8x")
+#define FILETAIL_TEMPLATE       ("UID:%010u,CHUNKID:%08x")
 #define LEN_FILETAIL_TEMPLATE   (13+10+8)
 
 struct Fileinfo
@@ -21,7 +21,7 @@ static inline int send_ack(int sock, unsigned int chunk_id)
 {
     char buf[LEN_RESUME_TEMPLATE_ACK+1];
 
-    snprintf(buf, LEN_RESUME_TEMPLATE_ACK, RESUME_TEMPLATE_ACK, chunk_id);
+    snprintf(buf, LEN_RESUME_TEMPLATE_ACK+1, RESUME_TEMPLATE_ACK, chunk_id);
     if(write(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
         return -1;
     return 0;
@@ -32,7 +32,7 @@ static inline void write_filetail(FILE *fp, unsigned int uid,  unsigned int chun
 {
     char buf[LEN_FILETAIL_TEMPLATE+1];
 
-    snprintf(buf, LEN_FILETAIL_TEMPLATE, FILETAIL_TEMPLATE, uid, chunk_id);
+    snprintf(buf, LEN_FILETAIL_TEMPLATE+1, FILETAIL_TEMPLATE, uid, chunk_id);
     fwrite(buf, 1, LEN_FILETAIL_TEMPLATE, fp);
 }
 
@@ -51,8 +51,11 @@ int recv_uploadings(int sock)
     if(read(sock, buf, LEN_RESUME_TEMPLATE) != LEN_RESUME_TEMPLATE)
         return -1;
 
+    write(1, buf, LEN_RESUME_TEMPLATE);
+    putchar('\n');
     if(sscanf(buf, RESUME_TEMPLATE, &uid, checksum, &file_size) != 3)
         return -1;
+    printf("File size: %ld\n", file_size);
 
     if(uid == 0)
         return -1;
@@ -88,16 +91,26 @@ int recv_uploadings(int sock)
         char excepted_head[LEN_CHUNK_HEAD_TEMPLATE+1] = "";
         int real_accepted_size = 0;
 
-        snprintf(excepted_head, LEN_CHUNK_HEAD_TEMPLATE, CHUNK_HEAD_TEMPLATE, i);
-        if(read(sock, buf, LEN_CHUNK_HEAD_TEMPLATE) != LEN_CHUNK_HEAD_TEMPLATE)
+        snprintf(excepted_head, LEN_CHUNK_HEAD_TEMPLATE+1, CHUNK_HEAD_TEMPLATE, i);
+        if(read(sock, buf, LEN_CHUNK_HEAD_TEMPLATE) != LEN_CHUNK_HEAD_TEMPLATE) {
+            printf("chunk_head length error\n");
             break;
-        if(strncmp(excepted_head, buf, LEN_CHUNK_HEAD_TEMPLATE) != 0)
+        }
+        if(strncmp(excepted_head, buf, LEN_CHUNK_HEAD_TEMPLATE) != 0) {
+            printf("chunk_head not matching\n");
             break;
+        }
         real_accepted_size = read(sock, accepted_content, UPLOAD_CHUNK_SIZE);
         if(real_accepted_size < 0)
             break;
-        if(i != total_chunk_num - 1 && real_accepted_size != UPLOAD_CHUNK_SIZE)
+        if(i != total_chunk_num - 1 && real_accepted_size != UPLOAD_CHUNK_SIZE) { //last chunk didn't check
+            printf("real_accepted_size not matching %d vs %d\n", real_accepted_size, UPLOAD_CHUNK_SIZE);
             break;
+        }
+        if(i == total_chunk_num - 1 && real_accepted_size != file_size%UPLOAD_CHUNK_SIZE) { //last chunk didn't check
+            printf("real_accepted_size not matching %d vs %ld\n", real_accepted_size, file_size%UPLOAD_CHUNK_SIZE);
+            break;
+        }
         fwrite(accepted_content, 1, real_accepted_size, fp);
     }
 
@@ -110,10 +123,14 @@ int recv_uploadings(int sock)
     free(accepted_content);
     rename(filepath2, filepath);
 
-    if(i < total_chunk_num)
+    if(i < total_chunk_num) {
+        printf("upload failed, %u/%u\n", i, total_chunk_num);
         return -1;
-    else
+    }
+    else {
+        printf("upload done, %u/%u\n", i, total_chunk_num);
         return 0;
+    }
 }
 
 int run_server(const char *base_dir, const char *listening_ip, int port)
@@ -187,5 +204,5 @@ int run_server(const char *base_dir, const char *listening_ip, int port)
 
 int main()
 {
-    run_server("", "0.0.0.0", 4399);
+    run_server("", "127.0.0.1", 4399);
 }
