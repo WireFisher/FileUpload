@@ -66,19 +66,19 @@ int recv_uploadings(int sock)
         char buf[LEN_FILETAIL_TEMPLATE+1];
 
         rename(filepath, filepath2);
-        fp = fopen(filepath2, "r");
+        fp = fopen(filepath2, "rb");
         fseek(fp, -LEN_FILETAIL_TEMPLATE, SEEK_END);
         fread(buf, 1, LEN_FILETAIL_TEMPLATE, fp);
         fclose(fp);
         sscanf(buf, FILETAIL_TEMPLATE, &file_uid, &chunk_id);
         if(file_uid != uid)
             chunk_id = 0;
-        fp = fopen(filepath2, "a");
+        fp = fopen(filepath2, "wb");
         fseek(fp, -LEN_FILETAIL_TEMPLATE, SEEK_END);
     }
     else {
         chunk_id = 0;
-        fp = fopen(filepath2, "a");
+        fp = fopen(filepath2, "wb");
     }
 
     if(send_ack(sock, chunk_id) < 0)

@@ -16,7 +16,7 @@ static inline int read_file_into_buf(const char *file, char **buf, long *filesiz
 {
     FILE *fp;
 
-    fp = fopen(file, "r");
+    fp = fopen(file, "rb");
     fseek(fp, 0, SEEK_END);
     *filesize = ftell(fp);
     fseek(fp, 0, SEEK_SET);
