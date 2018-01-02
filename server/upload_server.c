@@ -66,14 +66,12 @@ int recv_uploadings(int sock)
         char buf[LEN_FILETAIL_TEMPLATE+1];
 
         rename(filepath, filepath2);
-        fp = fopen(filepath2, "rb");
+        fp = fopen(filepath2, "rb+");
         fseek(fp, -LEN_FILETAIL_TEMPLATE, SEEK_END);
         fread(buf, 1, LEN_FILETAIL_TEMPLATE, fp);
-        fclose(fp);
         sscanf(buf, FILETAIL_TEMPLATE, &file_uid, &chunk_id);
         if(file_uid != uid)
             chunk_id = 0;
-        fp = fopen(filepath2, "wb");
         fseek(fp, -LEN_FILETAIL_TEMPLATE, SEEK_END);
     }
     else {
@@ -103,11 +101,11 @@ int recv_uploadings(int sock)
         real_accepted_size = read(sock, accepted_content, UPLOAD_CHUNK_SIZE);
         if(real_accepted_size < 0)
             break;
-        if(i != total_chunk_num - 1 && real_accepted_size != UPLOAD_CHUNK_SIZE) { //last chunk didn't check
+        if(i != total_chunk_num - 1 && real_accepted_size != UPLOAD_CHUNK_SIZE) {
             printf("real_accepted_size not matching %d vs %d\n", real_accepted_size, UPLOAD_CHUNK_SIZE);
             break;
         }
-        if(i == total_chunk_num - 1 && real_accepted_size != file_size%UPLOAD_CHUNK_SIZE) { //last chunk didn't check
+        if(i == total_chunk_num - 1 && real_accepted_size != file_size%UPLOAD_CHUNK_SIZE) {
             printf("real_accepted_size not matching %d vs %ld\n", real_accepted_size, file_size%UPLOAD_CHUNK_SIZE);
             break;
         }
