@@ -51,9 +51,9 @@ int send_file_info(int sock, unsigned int uid, char checksum[32], long filesize,
     char buf[LEN_RESUME_TEMPLATE+1] = "";
 
     snprintf(buf, LEN_RESUME_TEMPLATE+1, RESUME_TEMPLATE, uid, checksum, filesize);
-    printf("===================\n");
-    write(1, buf, LEN_RESUME_TEMPLATE);
-    printf("\n===================\n");
+    //printf("===================\n");
+    //write(1, buf, LEN_RESUME_TEMPLATE);
+    //printf("\n===================\n");
     if(write(sock, buf, LEN_RESUME_TEMPLATE) < 0)
         return -1;
     if(read(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
@@ -108,7 +108,7 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
 
     unsigned int i, total_chunk_num, reconnect_count, resume_id;
     total_chunk_num = (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE;
-    printf("Total_chunk_num: %u\n", total_chunk_num);
+    //printf("Total_chunk_num: %u\n", total_chunk_num);
 
 
     i = reconnect_count = 0;
@@ -142,14 +142,14 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
             continue;
         }
 
-        printf("starting from %uth chunk\n", resume_id);
+        //printf("starting from %uth chunk\n", resume_id);
 
         /* upload */
         for(i = resume_id; i < total_chunk_num; i++) {
-            printf("sending %uth chunk head\n", i);
+            //printf("sending %uth chunk head\n", i);
             if(send_chunk_head(sock, i) < 0)
                 break;
-            printf("sending %uth chunk body\n", i);
+            //printf("sending %uth chunk body\n", i);
             if(send_chunk_body(sock, file_buf, file_size, i) < 0)
                 break;
         }

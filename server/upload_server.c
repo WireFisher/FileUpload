@@ -51,11 +51,11 @@ int recv_uploadings(int sock)
     if(read(sock, buf, LEN_RESUME_TEMPLATE) != LEN_RESUME_TEMPLATE)
         return -1;
 
-    write(1, buf, LEN_RESUME_TEMPLATE);
-    putchar('\n');
+    //write(1, buf, LEN_RESUME_TEMPLATE);
+    //putchar('\n');
     if(sscanf(buf, RESUME_TEMPLATE, &uid, checksum, &file_size) != 3)
         return -1;
-    printf("File size: %ld\n", file_size);
+    //printf("File size: %ld\n", file_size);
 
     if(uid == 0)
         return -1;
@@ -124,11 +124,11 @@ int recv_uploadings(int sock)
     rename(filepath2, filepath);
 
     if(i < total_chunk_num) {
-        printf("upload failed, %u/%u\n", i, total_chunk_num);
+        printf("[-] Uploading failed, %u/%u\n", i, total_chunk_num);
         return -1;
     }
     else {
-        printf("upload done, %u/%u\n", i, total_chunk_num);
+        printf("[-] Uploading done, %u/%u\n", i, total_chunk_num);
         return 0;
     }
 }
