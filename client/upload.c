@@ -9,7 +9,128 @@
 #include <assert.h>
 #include <signal.h>
 #include "protocol.h"
+#include "ikcp.h"
 
+
+int create_udp_connect(const char *server_ip, int server_port, int udp_port_bind)
+{
+    // servaddr_
+	struct sockaddr_in servaddr_;
+    {
+        servaddr_.sin_family = AF_INET;
+        servaddr_.sin_port = htons(server_port);
+        int ret = inet_pton(AF_INET, server_ip, &servaddr_.sin_addr);
+        if (ret <= 0)
+        {
+            if (ret < 0) // errno set
+                std::cerr << "inet_pton error return < 0, with errno: " << errno << " " << strerror(errno) << std::endl;
+            else
+                std::cerr << "inet_pton error return 0" << std::endl;
+            return KCP_ERR_ADDRESS_INVALID;
+        }
+    }
+
+    // create udp_socket_
+    int udp_socket_;
+    {
+        udp_socket_ = socket(AF_INET, SOCK_DGRAM, 0);
+        if (udp_socket_ < 0)
+        {
+            std::cerr << "socket error return with errno: " << errno << " " << strerror(errno) << std::endl;
+            return KCP_ERR_CREATE_SOCKET_FAIL;
+        }
+    }
+
+    // set socket recv timeout
+    /*{
+        struct timeval recv_timeo;
+        recv_timeo.tv_sec = 0;
+        recv_timeo.tv_usec = 2 * 1000; // 2 milliseconds
+        int ret = setsockopt(udp_socket_, SOL_SOCKET, SO_RCVTIMEO, &recv_timeo, sizeof(recv_timeo));
+        if (ret < 0)
+        {
+            std::cerr << "setsockopt error return with errno: " << errno << " " << strerror(errno) << std::endl;
+        }
+    }*/
+
+    // set socket non-blocking
+    {
+        int flags = fcntl(udp_socket_, F_GETFL, 0);
+        if (flags == -1)
+        {
+            std::cerr << "get socket non-blocking: fcntl error return with errno: " << errno << " " << strerror(errno) << std::endl;
+            return KCP_ERR_SET_NON_BLOCK_FAIL;
+        }
+        int ret = fcntl(udp_socket_, F_SETFL, flags | O_NONBLOCK);
+        if (ret == -1)
+        {
+            std::cerr << "set socket non-blocking: fcntl error return with errno: " << errno << " " << strerror(errno) << std::endl;
+            return KCP_ERR_SET_NON_BLOCK_FAIL;
+        }
+    }
+
+    // set recv buf bigger
+
+    // bind
+    if (udp_port_bind != 0)
+    {
+        struct sockaddr_in bind_addr;
+        bind_addr.sin_family = AF_INET;
+        bind_addr.sin_port = htons(udp_port_bind);
+        bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        int ret_bind = bind(udp_socket_, (const struct sockaddr*)(&bind_addr), sizeof(bind_addr));
+        if (ret_bind < 0)
+            std::cerr << "setsockopt error return with errno: " << errno << " " << strerror(errno) << std::endl;
+    }
+
+    // udp connect
+    {
+        int ret = connect(udp_socket_, (const struct sockaddr*)(&servaddr_), sizeof(servaddr_));
+        if (ret < 0)
+        {
+            std::cerr << "connect error return with errno: " << errno << " " << strerror(errno) << std::endl;
+            return KCP_ERR_CONNECT_FUNC_FAIL;
+        }
+    }
+
+    return udp_socket_;
+}
+
+
+void kcp_client::send_udp_package(const char *buf, int len)
+{
+    const ssize_t send_ret = send(udp_socket_, buf, len, 0);
+    if (send_ret < 0)
+    {
+        std::cerr << "send_udp_package error with errno: " << errno << " " << strerror(errno) << std::endl;
+    }
+    else if (send_ret != len)
+    {
+        std::cerr << "send_udp_package error: not all packet send. " << send_ret << " in " << len << std::endl;
+    }
+}
+
+
+int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
+{
+    ((kcp_client*)user)->send_udp_package(buf, len);
+	return 0;
+}
+
+
+void init_kcp(kcp_conv_t conv)
+{
+    p_kcp_ = ikcp_create(conv, (void*)this);
+    p_kcp_->output = &kcp_client::udp_output;
+
+    // 启动快速模式
+    // 第二个参数 nodelay-启用以后若干常规加速将启动
+    // 第三个参数 interval为内部处理时钟，默认设置为 10ms
+    // 第四个参数 resend为快速重传指标，设置为2
+    // 第五个参数 为是否禁用常规流控，这里禁止
+    //ikcp_nodelay(p_kcp_, 1, 10, 2, 1);
+    ikcp_nodelay(p_kcp_, 1, 2, 1, 1); // 设置成1次ACK跨越直接重传, 这样反应速度会更快. 内部时钟5毫秒.
+}
 
 
 static inline int read_file_into_buf(const char *file, char **buf, long *filesize)
@@ -99,7 +220,6 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
     char *file_buf;
     char checksum[33];
     
-    signal(SIGPIPE, SIG_IGN);
 
     read_file_into_buf(file_name, &file_buf, &file_size);
     md5checksum(file_buf, file_size, checksum);
