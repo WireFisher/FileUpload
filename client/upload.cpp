@@ -1,0 +1,151 @@
+#include <stdio.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <stdlib.h>
+#include <openssl/md5.h>
+//#include <sys/types.h>
+#include <unistd.h>
+#include <assert.h>
+#include <signal.h>
+#include "protocol.h"
+#include "./client_lib/kcp_client_wrap.hpp"
+
+
+kcp_client_wrap kcp_client;
+static inline int read_file_into_buf(const char *file, char **buf, long *filesize)
+{
+    FILE *fp;
+
+    fp = fopen(file, "rb");
+    fseek(fp, 0, SEEK_END);
+    *filesize = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    *buf = malloc(*filesize);
+    if(fread(*buf, 1, *filesize, fp) < *filesize) {
+        perror("fread error.\n");
+        return -1;
+    }
+    fclose(fp);
+    return 0;
+}
+
+
+static inline void md5checksum(const char *plain, long length, char checksum[33])
+{
+    unsigned char digest[16];
+    MD5_CTX ctx;
+    int i;
+
+    MD5_Init(&ctx);
+    MD5_Update(&ctx, plain, length);
+    MD5_Final(digest, &ctx);
+
+    for(i = 0; i < 16; i++)
+        sprintf(&checksum[i*2], "%02x", (unsigned int)digest[i]);
+    checksum[32] = '\0';
+}
+
+
+int send_file_info(int sock, unsigned int uid, char checksum[32], long filesize, unsigned int *resume_id)
+{
+    char buf[LEN_RESUME_TEMPLATE+1] = "";
+
+    snprintf(buf, LEN_RESUME_TEMPLATE+1, RESUME_TEMPLATE, uid, checksum, filesize);
+    kcp_client.send_msg(std::string(buf, LEN_RESUME_TEMPLATE));
+    //if(read(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
+    //    return -1;
+    //if(sscanf(buf, RESUME_TEMPLATE_ACK, resume_id) != 1)
+    //    return -1;
+    *resume_id = 0;
+    return 0;
+}
+
+
+int send_chunk_head(int sock, unsigned int chunk_id)
+{
+    char buf[LEN_CHUNK_HEAD_TEMPLATE+1] = "";
+
+    snprintf(buf, LEN_CHUNK_HEAD_TEMPLATE+1, CHUNK_HEAD_TEMPLATE, chunk_id);
+    kcp_client.send_msg(std::string(buf, LEN_CHUNK_HEAD_TEMPLATE));
+    return 0;
+}
+
+
+int send_chunk_body(int sock, char *file_buf, long file_size, unsigned i)
+{
+    if(i == (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE - 1) {
+        kcp_client.send_msg(std::string(file_buf + i * UPLOAD_CHUNK_SIZE, file_size%UPLOAD_CHUNK_SIZE));
+    }
+    kcp_client.send_msg(std::string(file_buf + i * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE));
+    return 0;
+}
+
+
+int upload(const char *file_name, const char *dest_ip, int port, unsigned int uid)
+{
+    int sock;
+    struct sockaddr_in dest_addr;
+    long file_size;
+    char *file_buf;
+    char checksum[33];
+    
+
+    read_file_into_buf(file_name, &file_buf, &file_size);
+    md5checksum(file_buf, file_size, checksum);
+    printf("File MD5: %s\n", checksum);
+    printf("File Size: %ld\n", file_size);
+
+    unsigned int i, total_chunk_num, reconnect_count, resume_id;
+    total_chunk_num = (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE;
+    //printf("Total_chunk_num: %u\n", total_chunk_num);
+
+
+    i = reconnect_count = 0;
+    while(i < total_chunk_num && reconnect_count < 20) {
+        reconnect_count ++;
+        if(kcp_client.connect(0, dest_ip, port)) {
+            perror("Connecting to remote server failed, waiting for reconnecting.\n");
+            if(reconnect_count > 10) {
+                perror("Failed to connect to remote server. Please check the network.\n");
+                break;
+            }
+            sleep(5);
+            continue;
+        }
+
+        /* ask where to start */
+        if(send_file_info(sock, uid, checksum, file_size, &resume_id) < 0) {
+            close(sock);
+            continue;
+        }
+
+        printf("starting from %uth chunk\n", resume_id);
+
+        /* upload */
+        for(i = resume_id; i < total_chunk_num; i++) {
+            //printf("sending %uth chunk head\n", i);
+            if(send_chunk_head(sock, i) < 0)
+                break;
+            //printf("sending %uth chunk body\n", i);
+            if(send_chunk_body(sock, file_buf, file_size, i) < 0)
+                break;
+        }
+        close(sock);
+    }
+
+    free(file_buf);
+
+    if(i < total_chunk_num) {
+        printf("Upload failed, %u/%u\n", i, total_chunk_num);
+        return -1;
+    }
+
+    printf("Upload done, %u/%u\n", i, total_chunk_num);
+    return 0;
+}
+
+int main(int argc, char* argv[])
+{
+    upload(argv[1], "127.0.0.1", 4399, 1);
+}
