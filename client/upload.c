@@ -23,10 +23,10 @@ int create_udp_connect(const char *server_ip, int server_port, int udp_port_bind
         if (ret <= 0)
         {
             if (ret < 0) // errno set
-                std::cerr << "inet_pton error return < 0, with errno: " << errno << " " << strerror(errno) << std::endl;
+                perror("inet_pton error return < 0, with errno: ");
             else
-                std::cerr << "inet_pton error return 0" << std::endl;
-            return KCP_ERR_ADDRESS_INVALID;
+                perror("inet_pton error return 0");
+            return -1;
         }
     }
 
@@ -36,8 +36,8 @@ int create_udp_connect(const char *server_ip, int server_port, int udp_port_bind
         udp_socket_ = socket(AF_INET, SOCK_DGRAM, 0);
         if (udp_socket_ < 0)
         {
-            std::cerr << "socket error return with errno: " << errno << " " << strerror(errno) << std::endl;
-            return KCP_ERR_CREATE_SOCKET_FAIL;
+            perror("socket error return with errno: ");
+            return -1;
         }
     }
 
@@ -49,7 +49,7 @@ int create_udp_connect(const char *server_ip, int server_port, int udp_port_bind
         int ret = setsockopt(udp_socket_, SOL_SOCKET, SO_RCVTIMEO, &recv_timeo, sizeof(recv_timeo));
         if (ret < 0)
         {
-            std::cerr << "setsockopt error return with errno: " << errno << " " << strerror(errno) << std::endl;
+            perror("setsockopt error return with errno: ");
         }
     }*/
 
@@ -58,14 +58,14 @@ int create_udp_connect(const char *server_ip, int server_port, int udp_port_bind
         int flags = fcntl(udp_socket_, F_GETFL, 0);
         if (flags == -1)
         {
-            std::cerr << "get socket non-blocking: fcntl error return with errno: " << errno << " " << strerror(errno) << std::endl;
-            return KCP_ERR_SET_NON_BLOCK_FAIL;
+            perror("get socket non-blocking: fcntl error return with errno: ");
+            return -1;
         }
         int ret = fcntl(udp_socket_, F_SETFL, flags | O_NONBLOCK);
         if (ret == -1)
         {
-            std::cerr << "set socket non-blocking: fcntl error return with errno: " << errno << " " << strerror(errno) << std::endl;
-            return KCP_ERR_SET_NON_BLOCK_FAIL;
+            perror("set socket non-blocking: fcntl error return with errno: ");
+            return -1;
         }
     }
 
@@ -80,7 +80,7 @@ int create_udp_connect(const char *server_ip, int server_port, int udp_port_bind
         bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
         int ret_bind = bind(udp_socket_, (const struct sockaddr*)(&bind_addr), sizeof(bind_addr));
         if (ret_bind < 0)
-            std::cerr << "setsockopt error return with errno: " << errno << " " << strerror(errno) << std::endl;
+            perror("setsockopt error return with errno: ");
     }
 
     // udp connect
@@ -88,8 +88,8 @@ int create_udp_connect(const char *server_ip, int server_port, int udp_port_bind
         int ret = connect(udp_socket_, (const struct sockaddr*)(&servaddr_), sizeof(servaddr_));
         if (ret < 0)
         {
-            std::cerr << "connect error return with errno: " << errno << " " << strerror(errno) << std::endl;
-            return KCP_ERR_CONNECT_FUNC_FAIL;
+            perror("connect error return with errno: ");
+            return -1;
         }
     }
 
@@ -97,23 +97,23 @@ int create_udp_connect(const char *server_ip, int server_port, int udp_port_bind
 }
 
 
-void kcp_client::send_udp_package(const char *buf, int len)
+void send_udp_package(int udp_socket_, const char *buf, int len)
 {
     const ssize_t send_ret = send(udp_socket_, buf, len, 0);
     if (send_ret < 0)
     {
-        std::cerr << "send_udp_package error with errno: " << errno << " " << strerror(errno) << std::endl;
+        perror("send_udp_package error with errno: ");
     }
     else if (send_ret != len)
     {
-        std::cerr << "send_udp_package error: not all packet send. " << send_ret << " in " << len << std::endl;
+        perror("send_udp_package error: not all packet send. ");
     }
 }
 
 
 int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
 {
-    ((kcp_client*)user)->send_udp_package(buf, len);
+    send_udp_package(*(int*)user,buf, len);
 	return 0;
 }
 
@@ -121,7 +121,7 @@ int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
 void init_kcp(kcp_conv_t conv)
 {
     p_kcp_ = ikcp_create(conv, (void*)this);
-    p_kcp_->output = &kcp_client::udp_output;
+    p_kcp_->output = &udp_output;
 
     // 启动快速模式
     // 第二个参数 nodelay-启用以后若干常规加速将启动
@@ -287,7 +287,14 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
     return 0;
 }
 
-int main(int argc, char* argv[])
+//int main(int argc, char* argv[])
+//{
+//    upload(argv[1], "127.0.0.1", 4399, 1);
+//}
+
+int main()
 {
-    upload(argv[1], "127.0.0.1", 4399, 1);
+    int udp_sock;
+    udp_sock = create_udp_connect("127.0.0.1", 4399, 0);
+    init_kcp(1);
 }
