@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "../client/protocol.h"
+#include "kcp_server.hpp"
 
 
 #define FILETAIL_TEMPLATE       ("UID:%010u,CHUNKID:%08x")
@@ -202,5 +203,8 @@ int run_server(const char *base_dir, const char *listening_ip, int port)
 
 int main()
 {
-    run_server("", "127.0.0.1", 4399);
+    //run_server("", "127.0.0.1", 4399);
+    
+    server s("127.0.0.1", 4399);
+    s.run();
 }
