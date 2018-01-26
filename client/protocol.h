@@ -1,8 +1,9 @@
 #ifndef __UPLOAD_PROTOCOL_H
 #define __UPLOAD_PROTOCOL_H
 
-//#define UPLOAD_CHUNK_SIZE       (1*1024*1024)
-#define UPLOAD_CHUNK_SIZE     (1*1024)
+#define UPLOAD_CHUNK_SIZE       (10*1024)
+//#define UPLOAD_CHUNK_SIZE     (1*1024)
+//#define UPLOAD_CHUNK_SIZE     (128)
 
 #define RESUME_TEMPLATE         ("\x05UPL,UID:%010u,CHECKSUM:%32s,FILESIZE:%020ld")
 #define LEN_RESUME_TEMPLATE     (29+10+32+20)

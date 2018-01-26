@@ -61,6 +61,7 @@ int my_read(int fd,void *buffer,int length)
 		bytes_left -= bytes_read;
 		buffer += bytes_read;
 	}
+    printf("recv bytes: %d\n", length-bytes_left);
 	return(length-bytes_left);
 }
 
@@ -131,6 +132,7 @@ int recv_uploadings(int sock)
 
     total_chunk_num = (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE;
     for(i = chunk_id; i < total_chunk_num; i++) {
+        printf("recving %dth chunk\n", i);
         char excepted_head[LEN_CHUNK_HEAD_TEMPLATE+1] = "";
         int real_accepted_size = 0;
 

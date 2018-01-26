@@ -148,7 +148,7 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
     char *file_buf;
     char checksum[33];
     
-    signal(SIGPIPE, SIG_IGN);
+    //signal(SIGPIPE, SIG_IGN);
 
     read_file_into_buf(file_name, &file_buf, &file_size);
     md5checksum(file_buf, file_size, checksum);
@@ -157,7 +157,7 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
 
     unsigned int i, total_chunk_num, reconnect_count, resume_id;
     total_chunk_num = (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE;
-    //printf("Total_chunk_num: %u\n", total_chunk_num);
+    printf("Chunk_num: %u\n", total_chunk_num);
 
 
     i = reconnect_count = 0;
@@ -218,5 +218,6 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
 
 int main(int argc, char* argv[])
 {
-    upload(argv[1], "127.0.0.1", 4399, 1);
+    //upload(argv[1], "127.0.0.1", 4399, 1);
+    upload(argv[1], "123.206.75.118", 14399, 1);
 }
