@@ -4,7 +4,7 @@
 #include <boost/asio.hpp>
 #include <string>
 #include <boost/noncopyable.hpp>
-#include "./server_lib/server.hpp"
+#include "../asio_kcp/server_lib/server.hpp"
 
 class server
 : private boost::noncopyable
