@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
 #include "../client/protocol.h"
 
 
@@ -16,13 +17,60 @@ struct Fileinfo
     long filesize;
 };
 
+int my_write(int fd,void *buffer,int length)
+{
+	int bytes_left = length;
+	int bytes_written;
+
+	while(bytes_left>0)
+	{
+        bytes_written=write(fd,buffer,bytes_left);
+		if(bytes_written<=0)
+		{       
+			if(errno==EINTR)
+				bytes_written=0;
+			else             
+				return(-1);
+		}
+		bytes_left-=bytes_written;
+		buffer+=bytes_written;     
+	}
+	return(0);
+}
+
+int my_read(int fd,void *buffer,int length)
+{
+	int bytes_left = length;
+	int bytes_read;
+
+	bytes_left=length;
+	while(bytes_left>0)
+	{
+		bytes_read=read(fd,buffer, bytes_left);
+		if(bytes_read<0)
+		{
+			if(errno==EINTR)
+				bytes_read=0;
+			else {
+                printf("error in reading: %s\n", strerror(errno));
+				return(-1);
+            }
+		}
+		else if(bytes_read==0)
+			break;
+		bytes_left -= bytes_read;
+		buffer += bytes_read;
+	}
+	return(length-bytes_left);
+}
 
 static inline int send_ack(int sock, unsigned int chunk_id)
 {
     char buf[LEN_RESUME_TEMPLATE_ACK+1];
 
+    printf("sending ack\n");
     snprintf(buf, LEN_RESUME_TEMPLATE_ACK+1, RESUME_TEMPLATE_ACK, chunk_id);
-    if(write(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
+    if(my_write(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
         return -1;
     return 0;
 }
@@ -48,13 +96,16 @@ int recv_uploadings(int sock)
     unsigned int i;
     char *accepted_content;
 
-    if(read(sock, buf, LEN_RESUME_TEMPLATE) != LEN_RESUME_TEMPLATE)
+    printf("xxxxxxxxxxxxxxxxxx\n");
+    if(my_read(sock, buf, LEN_RESUME_TEMPLATE) < 0)
         return -1;
 
-    //write(1, buf, LEN_RESUME_TEMPLATE);
-    //putchar('\n');
+    printf("==================\n");
+    write(1, buf, LEN_RESUME_TEMPLATE);
+    putchar('\n');
     if(sscanf(buf, RESUME_TEMPLATE, &uid, checksum, &file_size) != 3)
         return -1;
+    printf("++++++++++++++++++\n");
     //printf("File size: %ld\n", file_size);
 
     if(uid == 0)
@@ -90,7 +141,7 @@ int recv_uploadings(int sock)
         int real_accepted_size = 0;
 
         snprintf(excepted_head, LEN_CHUNK_HEAD_TEMPLATE+1, CHUNK_HEAD_TEMPLATE, i);
-        if(read(sock, buf, LEN_CHUNK_HEAD_TEMPLATE) != LEN_CHUNK_HEAD_TEMPLATE) {
+        if(my_read(sock, buf, LEN_CHUNK_HEAD_TEMPLATE) < 0) {
             printf("chunk_head length error\n");
             break;
         }
@@ -98,7 +149,7 @@ int recv_uploadings(int sock)
             printf("chunk_head not matching\n");
             break;
         }
-        real_accepted_size = read(sock, accepted_content, UPLOAD_CHUNK_SIZE);
+        real_accepted_size = my_read(sock, accepted_content, UPLOAD_CHUNK_SIZE);
         if(real_accepted_size < 0)
             break;
         if(i != total_chunk_num - 1 && real_accepted_size != UPLOAD_CHUNK_SIZE) {
@@ -179,7 +230,6 @@ int run_server(const char *base_dir, const char *listening_ip, int port)
         }
         printf("recv connect ip=%s port=%d\n", inet_ntoa(peeraddr.sin_addr),
                ntohs(peeraddr.sin_port));
-
         pid = fork();
         if (pid == -1) {
             perror("fork error");

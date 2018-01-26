@@ -8,9 +8,55 @@
 #include <unistd.h>
 #include <assert.h>
 #include <signal.h>
+#include <errno.h>
 #include "protocol.h"
 
+int my_write(int fd,void *buffer,int length)
+{
+    int bytes_left = length;
+    int bytes_written;
 
+    while(bytes_left>0)
+    {
+        bytes_written=write(fd,buffer,bytes_left);
+        if(bytes_written<=0)
+        {
+            if(errno==EINTR)
+                bytes_written=0;
+            else
+                return(-1);
+        }
+        bytes_left-=bytes_written;
+        buffer+=bytes_written;
+    }
+    return(0);
+}
+
+int my_read(int fd,void *buffer,int length)
+{
+    int bytes_left = length;
+    int bytes_read;
+
+    bytes_left=length;
+    while(bytes_left>0)
+    {
+        bytes_read=read(fd,buffer, bytes_left);
+        if(bytes_read<0)
+        {
+            if(errno==EINTR)
+                bytes_read=0;
+            else {
+                printf("error in reading: %s\n", strerror(errno));
+                return(-1);
+            }
+        }
+        else if(bytes_read==0)
+            break;
+        bytes_left -= bytes_read;
+        buffer += bytes_read;
+    }
+    return(length-bytes_left);
+}
 
 static inline int read_file_into_buf(const char *file, char **buf, long *filesize)
 {
@@ -54,12 +100,19 @@ int send_file_info(int sock, unsigned int uid, char checksum[32], long filesize,
     //printf("===================\n");
     //write(1, buf, LEN_RESUME_TEMPLATE);
     //printf("\n===================\n");
-    if(write(sock, buf, LEN_RESUME_TEMPLATE) < 0)
+    printf("1\n");
+    if(my_write(sock, buf, LEN_RESUME_TEMPLATE) < 0)
         return -1;
-    if(read(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
+    printf("2\n");
+    if(my_read(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
         return -1;
+    printf("3\n");
+    printf("==================\n");
+    write(1, buf, LEN_RESUME_TEMPLATE_ACK);
+    printf("==================\n");
     if(sscanf(buf, RESUME_TEMPLATE_ACK, resume_id) != 1)
         return -1;
+    printf("4\n");
     return 0;
 }
 
@@ -69,7 +122,7 @@ int send_chunk_head(int sock, unsigned int chunk_id)
     char buf[LEN_CHUNK_HEAD_TEMPLATE+1] = "";
 
     snprintf(buf, LEN_CHUNK_HEAD_TEMPLATE+1, CHUNK_HEAD_TEMPLATE, chunk_id);
-    if(write(sock, buf, LEN_CHUNK_HEAD_TEMPLATE) < 0)
+    if(my_write(sock, buf, LEN_CHUNK_HEAD_TEMPLATE) < 0)
         return -1;
     return 0;
 }
@@ -78,13 +131,13 @@ int send_chunk_head(int sock, unsigned int chunk_id)
 int send_chunk_body(int sock, char *file_buf, long file_size, unsigned i)
 {
     if(i == (file_size + UPLOAD_CHUNK_SIZE - 1) / UPLOAD_CHUNK_SIZE - 1) {
-        if(write(sock, file_buf + i * UPLOAD_CHUNK_SIZE, file_size%UPLOAD_CHUNK_SIZE) != file_size % UPLOAD_CHUNK_SIZE)
+        if(my_write(sock, file_buf + i * UPLOAD_CHUNK_SIZE, file_size%UPLOAD_CHUNK_SIZE) < 0)
             return -1;
         else
             return 0;
     }
 
-    if(write(sock, file_buf + i * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE) < 0)
+    if(my_write(sock, file_buf + i * UPLOAD_CHUNK_SIZE, UPLOAD_CHUNK_SIZE) < 0)
         return -1;
     else
         return 0;
@@ -137,12 +190,13 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
         }
 
         /* ask where to start */
+        printf("asking where to start\n", resume_id);
         if(send_file_info(sock, uid, checksum, file_size, &resume_id) < 0) {
             close(sock);
             continue;
         }
 
-        //printf("starting from %uth chunk\n", resume_id);
+        printf("starting from %uth chunk\n", resume_id);
 
         /* upload */
         for(i = resume_id; i < total_chunk_num; i++) {
