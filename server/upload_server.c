@@ -68,7 +68,6 @@ static inline int send_ack(int sock, unsigned int chunk_id)
 {
     char buf[LEN_RESUME_TEMPLATE_ACK+1];
 
-    printf("sending ack\n");
     snprintf(buf, LEN_RESUME_TEMPLATE_ACK+1, RESUME_TEMPLATE_ACK, chunk_id);
     if(my_write(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
         return -1;
@@ -96,16 +95,11 @@ int recv_uploadings(int sock)
     unsigned int i;
     char *accepted_content;
 
-    printf("xxxxxxxxxxxxxxxxxx\n");
     if(my_read(sock, buf, LEN_RESUME_TEMPLATE) < 0)
         return -1;
 
-    printf("==================\n");
-    write(1, buf, LEN_RESUME_TEMPLATE);
-    putchar('\n');
     if(sscanf(buf, RESUME_TEMPLATE, &uid, checksum, &file_size) != 3)
         return -1;
-    printf("++++++++++++++++++\n");
     //printf("File size: %ld\n", file_size);
 
     if(uid == 0)

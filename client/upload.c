@@ -100,19 +100,15 @@ int send_file_info(int sock, unsigned int uid, char checksum[32], long filesize,
     //printf("===================\n");
     //write(1, buf, LEN_RESUME_TEMPLATE);
     //printf("\n===================\n");
-    printf("1\n");
     if(my_write(sock, buf, LEN_RESUME_TEMPLATE) < 0)
         return -1;
-    printf("2\n");
     if(my_read(sock, buf, LEN_RESUME_TEMPLATE_ACK) < 0)
         return -1;
-    printf("3\n");
-    printf("==================\n");
-    write(1, buf, LEN_RESUME_TEMPLATE_ACK);
-    printf("==================\n");
+    //printf("==================\n");
+    //write(1, buf, LEN_RESUME_TEMPLATE_ACK);
+    //printf("==================\n");
     if(sscanf(buf, RESUME_TEMPLATE_ACK, resume_id) != 1)
         return -1;
-    printf("4\n");
     return 0;
 }
 
@@ -190,7 +186,6 @@ int upload(const char *file_name, const char *dest_ip, int port, unsigned int ui
         }
 
         /* ask where to start */
-        printf("asking where to start\n", resume_id);
         if(send_file_info(sock, uid, checksum, file_size, &resume_id) < 0) {
             close(sock);
             continue;
